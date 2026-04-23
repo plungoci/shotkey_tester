@@ -1,85 +1,96 @@
-const int pinSense = A0;
+const uint8_t kSensePin = A0;
 
-// Arduino UNO ADC reference voltage when powered from 5V.
-const float kReferenceVoltage = 5.0;
+// Nano/UNO ADC reference voltage in millivolts when powered from 5V.
+const uint16_t kReferenceMillivolts = 5000;
 
 // Number of samples used to smooth each analog reading.
-const int kSampleCount = 50;
+const uint8_t kSampleCount = 50;
 
-// Voltage thresholds used for component diagnostics.
-const float kShortThreshold = 0.10;
-const float kDiodeMinThreshold = 0.15;
-const float kDiodeMaxThreshold = 0.40;
-const float kOpenThreshold = 4.5;
+// Voltage thresholds used for component diagnostics (in millivolts).
+const uint16_t kShortThresholdMv = 100;
+const uint16_t kDiodeMinThresholdMv = 150;
+const uint16_t kDiodeMaxThresholdMv = 400;
+const uint16_t kOpenThresholdMv = 4500;
 
 // RGB LED is common-cathode: HIGH turns a channel ON.
-const int pinLedRed = 6;
-const int pinLedGreen = 5;
-const int pinLedBlue = 3;
+const uint8_t kLedRedPin = 6;
+const uint8_t kLedGreenPin = 5;
+const uint8_t kLedBluePin = 3;
 
 void setRgbLed(bool pass) {
-  digitalWrite(pinLedRed, pass ? LOW : HIGH);
-  digitalWrite(pinLedGreen, pass ? HIGH : LOW);
-  digitalWrite(pinLedBlue, LOW);
+  digitalWrite(kLedRedPin, pass ? LOW : HIGH);
+  digitalWrite(kLedGreenPin, pass ? HIGH : LOW);
+  digitalWrite(kLedBluePin, LOW);
 }
 
-int readAverageAdcValue() {
-  long adcSum = 0;
-  for (int i = 0; i < kSampleCount; i++) {
-    adcSum += analogRead(pinSense);
+uint16_t readAverageAdcValue() {
+  uint32_t adcSum = 0;
+  for (uint8_t i = 0; i < kSampleCount; i++) {
+    adcSum += analogRead(kSensePin);
   }
 
   return adcSum / kSampleCount;
 }
 
-float adcToVoltage(int adcValue) {
-  return adcValue * kReferenceVoltage / 1024.0;
+uint16_t adcToMillivolts(uint16_t adcValue) {
+  // Rounded integer conversion: mV = adc * Vref / 1023.
+  return (static_cast<uint32_t>(adcValue) * kReferenceMillivolts + 511) / 1023;
 }
 
-bool evaluateComponent(float measuredVoltage) {
-  if (measuredVoltage < kShortThreshold) {
-    Serial.println("Diag: SHORT");
+bool evaluateComponent(uint16_t measuredMillivolts) {
+  if (measuredMillivolts < kShortThresholdMv) {
+    Serial.println(F("Diag: SHORT"));
     return false;
   }
 
-  if (measuredVoltage >= kDiodeMinThreshold && measuredVoltage <= kDiodeMaxThreshold) {
-    Serial.println("Diag: DIODE OK");
+  if (measuredMillivolts >= kDiodeMinThresholdMv && measuredMillivolts <= kDiodeMaxThresholdMv) {
+    Serial.println(F("Diag: DIODE OK"));
     return true;
   }
 
-  if (measuredVoltage > kOpenThreshold) {
-    Serial.println("Diag: OPEN");
+  if (measuredMillivolts > kOpenThresholdMv) {
+    Serial.println(F("Diag: OPEN"));
     return false;
   }
 
-  Serial.println("Diag: LEAKAGE / DEGRADATA");
+  Serial.println(F("Diag: LEAKAGE / DEGRADATA"));
   return false;
 }
 
-void printMeasurements(int adcValue, float measuredVoltage) {
-  Serial.print("Measurements = ");
+void printMeasurements(uint16_t adcValue, uint16_t measuredMillivolts) {
+  Serial.print(F("Measurements = "));
   Serial.print(kSampleCount);
-  Serial.print("   Avg ADC = ");
+  Serial.print(F("   Avg ADC = "));
   Serial.print(adcValue);
-  Serial.print("   V = ");
-  Serial.println(measuredVoltage, 3);
+  Serial.print(F("   V = "));
+  Serial.print(measuredMillivolts / 1000);
+  Serial.print('.');
+
+  uint16_t fractional = measuredMillivolts % 1000;
+  if (fractional < 100) {
+    Serial.print('0');
+  }
+  if (fractional < 10) {
+    Serial.print('0');
+  }
+  Serial.println(fractional);
 }
 
 void setup() {
   Serial.begin(115200);
 
-  pinMode(pinLedRed, OUTPUT);
-  pinMode(pinLedGreen, OUTPUT);
-  pinMode(pinLedBlue, OUTPUT);
+  pinMode(kLedRedPin, OUTPUT);
+  pinMode(kLedGreenPin, OUTPUT);
+  pinMode(kLedBluePin, OUTPUT);
   setRgbLed(false);
 }
 
 void loop() {
-  int adcValue = readAverageAdcValue();
-  float measuredVoltage = adcToVoltage(adcValue);
+  uint16_t adcValue = readAverageAdcValue();
+  uint16_t measuredMillivolts = adcToMillivolts(adcValue);
 
-  printMeasurements(adcValue, measuredVoltage);
-  bool pass = evaluateComponent(measuredVoltage);
+  printMeasurements(adcValue, measuredMillivolts);
+  bool pass = evaluateComponent(measuredMillivolts);
   setRgbLed(pass);
 
   Serial.println();
