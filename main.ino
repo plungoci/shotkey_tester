@@ -12,15 +12,60 @@ const uint16_t kDiodeMinThresholdMv = 150;
 const uint16_t kDiodeMaxThresholdMv = 400;
 const uint16_t kOpenThresholdMv = 4500;
 
-// RGB LED is common-cathode: HIGH turns a channel ON.
+// RGB LED is common-cathode and connected to PWM-capable pins.
 const uint8_t kLedRedPin = 6;
 const uint8_t kLedGreenPin = 5;
 const uint8_t kLedBluePin = 3;
 
+// LED forward voltages in millivolts (from user-provided values).
+const uint16_t kLedRedForwardMv = 2000;
+const uint16_t kLedGreenForwardMv = 3200;
+const uint16_t kLedBlueForwardMv = 3100;
+
+uint8_t dutyFromForwardVoltage(uint16_t forwardMv, uint16_t targetHeadroomMv) {
+  if (forwardMv >= kReferenceMillivolts) {
+    return 0;
+  }
+
+  uint16_t headroomMv = kReferenceMillivolts - forwardMv;
+  if (headroomMv == 0) {
+    return 0;
+  }
+
+  // Keep currents similar for equal resistor values on all channels:
+  // duty ~= target_headroom / actual_headroom.
+  uint32_t scaledDuty = (static_cast<uint32_t>(targetHeadroomMv) * 255 + (headroomMv / 2)) / headroomMv;
+  if (scaledDuty > 255) {
+    scaledDuty = 255;
+  }
+
+  return static_cast<uint8_t>(scaledDuty);
+}
+
 void setRgbLed(bool pass) {
-  digitalWrite(kLedRedPin, pass ? LOW : HIGH);
-  digitalWrite(kLedGreenPin, pass ? HIGH : LOW);
-  digitalWrite(kLedBluePin, LOW);
+  // Use the smallest headroom as reference so no channel exceeds 255.
+  const uint16_t targetHeadroomMv = min(min(kReferenceMillivolts - kLedGreenForwardMv,
+                                             kReferenceMillivolts - kLedBlueForwardMv),
+                                        kReferenceMillivolts - kLedRedForwardMv);
+
+  const uint8_t redDuty = dutyFromForwardVoltage(kLedRedForwardMv, targetHeadroomMv);
+  const uint8_t greenDuty = dutyFromForwardVoltage(kLedGreenForwardMv, targetHeadroomMv);
+  // Blue duty can be used later for mixed-color status effects.
+  const uint8_t blueDuty = dutyFromForwardVoltage(kLedBlueForwardMv, targetHeadroomMv);
+
+  // PASS = green, FAIL = red. Blue kept off for current diagnostic mode.
+  analogWrite(kLedRedPin, pass ? 0 : redDuty);
+  analogWrite(kLedGreenPin, pass ? greenDuty : 0);
+  analogWrite(kLedBluePin, 0);
+  (void)blueDuty;
+
+  // Optional debug values (uncomment if needed):
+  // Serial.print(F("PWM R/G/B = "));
+  // Serial.print(redDuty);
+  // Serial.print('/');
+  // Serial.print(greenDuty);
+  // Serial.print('/');
+  // Serial.println(blueDuty);
 }
 
 uint16_t readAverageAdcValue() {
