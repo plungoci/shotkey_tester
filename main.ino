@@ -1,3 +1,14 @@
+/*
+  Arduino 5V
+   |
+ [1kΩ]
+   |
+   +------ A0 (analog input)
+   |
+  |>|  SD103B (Schottky diode)
+   |
+  GND
+ */
 const uint8_t kSensePin = A0;
 
 // Nano/UNO ADC reference voltage in millivolts when powered from 5V.
