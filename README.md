@@ -1,44 +1,70 @@
-# Shotkey Tester
+# Schottky Cable Tester (Arduino Nano)
 
-`shotkey_tester` is a small Arduino-based test setup for measuring a signal on analog pin `A0`.
-The circuit uses:
+Acest proiect testează un cablu cu 2 conectori în care există o diodă între capete.
+Sketch-ul din `main.ino` simulează testul de diodă al multimetrului în ambele polarități și decide rezultatul cu 2 LED-uri:
 
-- a **1 kΩ series resistor** from `5V` to the measurement node, and
-- an **SD103B Schottky diode** from the same node to `GND` for clamping/protection behavior.
+- **LED verde (D5)** = cablu bun / valori în intervalul calibrat.
+- **LED roșu (D6)** = problemă (diodă lipsă, inversată, altă valoare, contact slab).
 
-## Electrical Wiring
+## Cum funcționează
 
-### Connection summary
+Programul aplică pe rând două polarități pe cablu:
 
-| From | To | Component / Notes |
-| --- | --- | --- |
-| Arduino `5V` | Measurement node | Through a **1 kΩ resistor** |
-| Measurement node | Arduino `A0` | Direct connection for analog read |
-| Measurement node | Arduino `GND` | Through **SD103B** diode |
+1. **D8 = plus**, **D9 = minus** și măsoară căderea de tensiune `v_ab`.
+2. **D9 = plus**, **D8 = minus** și măsoară căderea de tensiune `v_ba`.
 
-### ASCII schematic
+Valorile măsurate sunt comparate cu țintele calibrate:
+
+- `TARGET_AB = 4.945 V`
+- `TARGET_BA = 0.280 V`
+
+Cu toleranțe:
+
+- `TOL_AB = ±0.30 V`
+- `TOL_BA = ±0.15 V`
+
+Dacă ambele măsurători sunt în interval, testul este **OK** (verde), altfel **PROBLEMĂ** (roșu).
+
+## Conexiuni hardware
+
+### Test cablu (obligatoriu cu rezistențe serie)
+
+- `D8` → **1kΩ** → Conector cablu 1
+- `D9` → **1kΩ** → Conector cablu 2
+- `A0` la nodul D8 (după rezistor)
+- `A1` la nodul D9 (după rezistor)
+
+### LED-uri stare
+
+- `D5` → rezistor 220Ω → LED verde → GND
+- `D6` → rezistor 220Ω → LED roșu → GND
+
+## Monitor serial
+
+La `9600 baud`, sketch-ul afișează continuu:
+
+- tensiunea pentru `D8+,D9-`
+- tensiunea pentru `D9+,D8-`
+- verdictul `OK` sau `PROBLEMA`
+
+Exemplu:
 
 ```text
-Arduino 5V
-   |
- [1kΩ]
-   |
-   +------ A0 (analog input)
-   |
-  |>|  SD103B (Schottky diode)
-   |
-  GND
+D8+,D9-: 4.940 V (tinta 4.945) | D9+,D8-: 0.276 V (tinta 0.280) => OK (LED verde)
 ```
 
-### Wiring steps
+## Ajustare / calibrare
 
-1. Connect one side of the `1 kΩ` resistor to Arduino `5V`.
-2. Connect the other side of the resistor to a shared **measurement node**.
-3. Connect the measurement node to Arduino analog pin `A0`.
-4. Connect the **anode/cathode orientation** of the SD103B as shown in the schematic between the measurement node and `GND`.
-5. Verify all grounds are common before powering the board.
+Dacă folosești alt cablu, alt tip de diodă sau altă sursă, ajustează în `main.ino`:
 
-## Repository Contents
+- `TARGET_AB`
+- `TARGET_BA`
+- `TOL_AB`
+- `TOL_BA`
 
-- `main.ino` - Arduino sketch for the tester.
-- `README.md` - Project overview and electrical wiring guide.
+Recomandare: măsoară de câteva ori pe un cablu „bun” și setează țintele după media rezultatelor.
+
+## Fișiere
+
+- `main.ino` – logica de test în ambele polarități + control LED-uri.
+- `README.md` – documentația pentru versiunea curentă.
