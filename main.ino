@@ -1,154 +1,132 @@
 /*
-  Arduino 5V
-   |
- [1kΩ]
-   |
-   +------ A0 (analog input)
-   |
-  |>|  SD103B (Schottky diode)
-   |
-  GND
- */
-const uint8_t kSensePin = A0;
+  Test "dioda mode" pentru cablu intre D8 si D9 (Arduino Nano)
+  - Masureaza tensiunea pe dioda in ambele polaritati
+  - Compara cu valorile tinta:
+      D8+, D9-  => ~2.265V
+      D9+, D8-  => ~0.250V
+  - LED verde (D5) = OK
+  - LED rosu  (D6) = problema
 
-// Nano/UNO ADC reference voltage in millivolts when powered from 5V.
-const uint16_t kReferenceMillivolts = 5000;
+  Conexiuni recomandate:
+    D8 --- 1k --- conector 1 cablu ---[dioda in cablu]--- conector 2 --- 1k --- D9
+    A0 la nodul D8 (dupa rezistor)
+    A1 la nodul D9 (dupa rezistor)
 
-// Number of samples used to smooth each analog reading.
-const uint8_t kSampleCount = 50;
+    LED verde: D5 -> 220R -> LED -> GND
+    LED rosu : D6 -> 220R -> LED -> GND
+*/
 
-// Voltage thresholds used for component diagnostics (in millivolts).
-const uint16_t kShortThresholdMv = 100;
-const uint16_t kDiodeMinThresholdMv = 150;
-const uint16_t kDiodeMaxThresholdMv = 400;
-const uint16_t kOpenThresholdMv = 4500;
+const byte PIN_A = 8;   // D8
+const byte PIN_B = 9;   // D9
 
-// RGB LED is common-cathode and connected to PWM-capable pins.
-const uint8_t kLedRedPin = 6;
-const uint8_t kLedGreenPin = 5;
-const uint8_t kLedBluePin = 3;
+const byte SENSE_A = A0; // tensiune la capatul A
+const byte SENSE_B = A1; // tensiune la capatul B
 
-// LED forward voltages in millivolts (from user-provided values).
-const uint16_t kLedRedForwardMv = 2000;
-const uint16_t kLedGreenForwardMv = 3200;
-const uint16_t kLedBlueForwardMv = 3100;
+const byte LED_GREEN = 5;
+const byte LED_RED   = 6;
 
-uint8_t dutyFromForwardVoltage(uint16_t forwardMv, uint16_t targetHeadroomMv) {
-  if (forwardMv >= kReferenceMillivolts) {
-    return 0;
+const float VCC = 5.0;
+
+// Valorile tale "multimetru"
+const float TARGET_AB = 4.945; // D8+, D9-
+const float TARGET_BA = 0.280; // D9+, D8-
+
+// Tolerante (ajusteaza daca trebuie)
+const float TOL_AB = 0.30; // +/- 0.30V
+const float TOL_BA = 0.15; // +/- 0.15V
+
+float readVoltage(byte pin, byte samples = 20) {
+  unsigned long sum = 0;
+  for (byte i = 0; i < samples; i++) {
+    sum += analogRead(pin);
+    delay(1);
   }
-
-  uint16_t headroomMv = kReferenceMillivolts - forwardMv;
-  if (headroomMv == 0) {
-    return 0;
-  }
-
-  // Keep currents similar for equal resistor values on all channels:
-  // duty ~= target_headroom / actual_headroom.
-  uint32_t scaledDuty = (static_cast<uint32_t>(targetHeadroomMv) * 255 + (headroomMv / 2)) / headroomMv;
-  if (scaledDuty > 255) {
-    scaledDuty = 255;
-  }
-
-  return static_cast<uint8_t>(scaledDuty);
+  float raw = (float)sum / samples;
+  return raw * (VCC / 1023.0);
 }
 
-void setRgbLed(bool pass) {
-  // Use the smallest headroom as reference so no channel exceeds 255.
-  const uint16_t targetHeadroomMv = min(min(kReferenceMillivolts - kLedGreenForwardMv,
-                                             kReferenceMillivolts - kLedBlueForwardMv),
-                                        kReferenceMillivolts - kLedRedForwardMv);
-
-  const uint8_t redDuty = dutyFromForwardVoltage(kLedRedForwardMv, targetHeadroomMv);
-  const uint8_t greenDuty = dutyFromForwardVoltage(kLedGreenForwardMv, targetHeadroomMv);
-  // Blue duty can be used later for mixed-color status effects.
-  const uint8_t blueDuty = dutyFromForwardVoltage(kLedBlueForwardMv, targetHeadroomMv);
-
-  // PASS = green, FAIL = red. Blue kept off for current diagnostic mode.
-  analogWrite(kLedRedPin, pass ? 0 : redDuty);
-  analogWrite(kLedGreenPin, pass ? greenDuty : 0);
-  analogWrite(kLedBluePin, 0);
-  (void)blueDuty;
-
-  // Optional debug values (uncomment if needed):
-  // Serial.print(F("PWM R/G/B = "));
-  // Serial.print(redDuty);
-  // Serial.print('/');
-  // Serial.print(greenDuty);
-  // Serial.print('/');
-  // Serial.println(blueDuty);
+void hiZPins() {
+  pinMode(PIN_A, INPUT);
+  pinMode(PIN_B, INPUT);
 }
 
-uint16_t readAverageAdcValue() {
-  uint32_t adcSum = 0;
-  for (uint8_t i = 0; i < kSampleCount; i++) {
-    adcSum += analogRead(kSensePin);
-  }
+// Returneaza caderea V(A)-V(B), pozitiva
+float measureDrop_AB() {
+  // D8 = HIGH, D9 = LOW
+  pinMode(PIN_A, OUTPUT);
+  pinMode(PIN_B, OUTPUT);
+  digitalWrite(PIN_A, HIGH);
+  digitalWrite(PIN_B, LOW);
+  delay(8);
 
-  return adcSum / kSampleCount;
+  float va = readVoltage(SENSE_A);
+  float vb = readVoltage(SENSE_B);
+  float vd = va - vb;
+  if (vd < 0) vd = -vd;
+  return vd;
 }
 
-uint16_t adcToMillivolts(uint16_t adcValue) {
-  // Rounded integer conversion: mV = adc * Vref / 1023.
-  return (static_cast<uint32_t>(adcValue) * kReferenceMillivolts + 511) / 1023;
+// Returneaza caderea cand inversam polaritatea (D9 HIGH, D8 LOW)
+float measureDrop_BA() {
+  pinMode(PIN_A, OUTPUT);
+  pinMode(PIN_B, OUTPUT);
+  digitalWrite(PIN_A, LOW);
+  digitalWrite(PIN_B, HIGH);
+  delay(8);
+
+  float va = readVoltage(SENSE_A);
+  float vb = readVoltage(SENSE_B);
+  float vd = vb - va;
+  if (vd < 0) vd = -vd;
+  return vd;
 }
 
-bool evaluateComponent(uint16_t measuredMillivolts) {
-  if (measuredMillivolts < kShortThresholdMv) {
-    Serial.println(F("Diag: SHORT"));
-    return false;
-  }
-
-  if (measuredMillivolts >= kDiodeMinThresholdMv && measuredMillivolts <= kDiodeMaxThresholdMv) {
-    Serial.println(F("Diag: DIODE OK"));
-    return true;
-  }
-
-  if (measuredMillivolts > kOpenThresholdMv) {
-    Serial.println(F("Diag: OPEN"));
-    return false;
-  }
-
-  Serial.println(F("Diag: LEAKAGE / DEGRADATA"));
-  return false;
+bool inRange(float v, float target, float tol) {
+  return (v >= target - tol) && (v <= target + tol);
 }
 
-void printMeasurements(uint16_t adcValue, uint16_t measuredMillivolts) {
-  Serial.print(F("Measurements = "));
-  Serial.print(kSampleCount);
-  Serial.print(F("   Avg ADC = "));
-  Serial.print(adcValue);
-  Serial.print(F("   V = "));
-  Serial.print(measuredMillivolts / 1000);
-  Serial.print('.');
-
-  uint16_t fractional = measuredMillivolts % 1000;
-  if (fractional < 100) {
-    Serial.print('0');
-  }
-  if (fractional < 10) {
-    Serial.print('0');
-  }
-  Serial.println(fractional);
+void setResult(bool ok) {
+  digitalWrite(LED_GREEN, ok ? HIGH : LOW);
+  digitalWrite(LED_RED,   ok ? LOW  : HIGH);
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
 
-  pinMode(kLedRedPin, OUTPUT);
-  pinMode(kLedGreenPin, OUTPUT);
-  pinMode(kLedBluePin, OUTPUT);
-  setRgbLed(false);
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_RED, OUTPUT);
+  setResult(false);
+
+  hiZPins();
+  delay(100);
+
+  Serial.println("Start test tip multimetru (dioda mode)...");
 }
 
 void loop() {
-  uint16_t adcValue = readAverageAdcValue();
-  uint16_t measuredMillivolts = adcToMillivolts(adcValue);
+  float v_ab = measureDrop_AB(); // D8+, D9-
+  hiZPins();
+  delay(5);
 
-  printMeasurements(adcValue, measuredMillivolts);
-  bool pass = evaluateComponent(measuredMillivolts);
-  setRgbLed(pass);
+  float v_ba = measureDrop_BA(); // D9+, D8-
+  hiZPins();
 
-  Serial.println();
-  delay(500);
+  bool ok_ab = inRange(v_ab, TARGET_AB, TOL_AB);
+  bool ok_ba = inRange(v_ba, TARGET_BA, TOL_BA);
+  bool ok = ok_ab && ok_ba;
+
+  setResult(ok);
+
+  Serial.print("D8+,D9-: ");
+  Serial.print(v_ab, 3);
+  Serial.print(" V (tinta ");
+  Serial.print(TARGET_AB, 3);
+  Serial.print(") | D9+,D8-: ");
+  Serial.print(v_ba, 3);
+  Serial.print(" V (tinta ");
+  Serial.print(TARGET_BA, 3);
+  Serial.print(") => ");
+  Serial.println(ok ? "OK (LED verde)" : "PROBLEMA (LED rosu)");
+
+  delay(600);
 }
