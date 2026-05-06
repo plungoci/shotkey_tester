@@ -23,6 +23,11 @@ Cu toleranțe:
 - `TOL_AB = ±0.30 V`
 - `TOL_BA = ±0.15 V`
 
+Intensitatea LED-urilor este controlată prin PWM:
+
+- `PWM_LED_GREEN = 255`
+- `PWM_LED_RED = 255`
+
 Dacă ambele măsurători sunt în interval, testul este **OK** (verde), altfel **PROBLEMĂ** (roșu).
 
 ## Conexiuni hardware
@@ -61,6 +66,7 @@ Dacă folosești alt cablu, alt tip de diodă sau altă sursă, ajustează în `
 - `TARGET_BA`
 - `TOL_AB`
 - `TOL_BA`
+- `PWM_LED_GREEN` și `PWM_LED_RED` pentru intensitatea LED-urilor (`0` = stins, `255` = intensitate maximă)
 
 Recomandare: măsoară de câteva ori pe un cablu „bun” și setează țintele după media rezultatelor.
 

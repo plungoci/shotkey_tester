@@ -25,6 +25,10 @@ const byte SENSE_B = A1; // tensiune la capatul B
 const byte LED_GREEN = 5;
 const byte LED_RED   = 6;
 
+// Intensitatea LED-urilor PWM (0 = stins, 255 = intensitate maxima)
+byte PWM_LED_GREEN = 255;
+byte PWM_LED_RED   = 255;
+
 const float VCC = 5.0;
 
 // Valorile tale "multimetru"
@@ -86,8 +90,8 @@ bool inRange(float v, float target, float tol) {
 }
 
 void setResult(bool ok) {
-  digitalWrite(LED_GREEN, ok ? HIGH : LOW);
-  digitalWrite(LED_RED,   ok ? LOW  : HIGH);
+  analogWrite(LED_GREEN, ok ? PWM_LED_GREEN : 0);
+  analogWrite(LED_RED,   ok ? 0             : PWM_LED_RED);
 }
 
 void setup() {
