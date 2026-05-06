@@ -1,76 +1,91 @@
 # Schottky Cable Tester (Arduino Nano)
 
-Acest proiect testează un cablu cu 2 conectori în care există o diodă între capete.
-Sketch-ul din `main.ino` simulează testul de diodă al multimetrului în ambele polarități și decide rezultatul cu 2 LED-uri:
+This project tests a two-connector cable that contains a diode between its ends. The Arduino sketch in `main.ino` emulates a multimeter diode test in both polarities, compares the measured voltage drops with calibrated targets, and reports the result with two status LEDs.
 
-- **LED verde (D5)** = cablu bun / valori în intervalul calibrat.
-- **LED roșu (D6)** = problemă (diodă lipsă, inversată, altă valoare, contact slab).
+- **Green LED (D5)**: the cable is good and both readings are inside the calibrated ranges.
+- **Red LED (D6)**: a fault was detected, such as a missing diode, reversed diode, wrong voltage drop, or weak contact.
 
-## Cum funcționează
+## How it works
 
-Programul aplică pe rând două polarități pe cablu:
+The sketch drives the cable in two directions:
 
-1. **D8 = plus**, **D9 = minus** și măsoară căderea de tensiune `v_ab`.
-2. **D9 = plus**, **D8 = minus** și măsoară căderea de tensiune `v_ba`.
+1. **D8 = positive**, **D9 = negative**, then measures the voltage drop as `v_ab`.
+2. **D9 = positive**, **D8 = negative**, then measures the voltage drop as `v_ba`.
 
-Valorile măsurate sunt comparate cu țintele calibrate:
+The readings are compared against these calibrated targets:
 
 - `TARGET_AB = 4.945 V`
 - `TARGET_BA = 0.280 V`
 
-Cu toleranțe:
+The accepted tolerances are:
 
 - `TOL_AB = ±0.30 V`
 - `TOL_BA = ±0.15 V`
 
-Intensitatea LED-urilor este controlată prin PWM:
+LED brightness is controlled with PWM:
 
 - `PWM_LED_GREEN = 255`
 - `PWM_LED_RED = 255`
 
-Dacă ambele măsurători sunt în interval, testul este **OK** (verde), altfel **PROBLEMĂ** (roșu).
+If both measurements are within range, the test result is **OK** and the green LED turns on. Otherwise, the result is **PROBLEM** and the red LED turns on.
 
-## Conexiuni hardware
+## Hardware connections
 
-### Test cablu (obligatoriu cu rezistențe serie)
+### Cable test circuit
 
-- `D8` → **1kΩ** → Conector cablu 1
-- `D9` → **1kΩ** → Conector cablu 2
-- `A0` la nodul D8 (după rezistor)
-- `A1` la nodul D9 (după rezistor)
+Use series resistors on both drive pins to limit current:
 
-### LED-uri stare
+- `D8` → **1 kΩ** → cable connector 1
+- `D9` → **1 kΩ** → cable connector 2
+- `A0` connected to the D8-side node, after the resistor
+- `A1` connected to the D9-side node, after the resistor
 
-- `D5` → rezistor 220Ω → LED verde → GND
-- `D6` → rezistor 220Ω → LED roșu → GND
-
-## Monitor serial
-
-La `9600 baud`, sketch-ul afișează continuu:
-
-- tensiunea pentru `D8+,D9-`
-- tensiunea pentru `D9+,D8-`
-- verdictul `OK` sau `PROBLEMA`
-
-Exemplu:
+Recommended wiring overview:
 
 ```text
-D8+,D9-: 4.940 V (tinta 4.945) | D9+,D8-: 0.276 V (tinta 0.280) => OK (LED verde)
+D8 --- 1 kΩ --- connector 1 ---[diode inside cable]--- connector 2 --- 1 kΩ --- D9
+                 |                                                |
+                A0                                               A1
 ```
 
-## Ajustare / calibrare
+### Status LEDs
 
-Dacă folosești alt cablu, alt tip de diodă sau altă sursă, ajustează în `main.ino`:
+- `D5` → 220 Ω resistor → green LED → GND
+- `D6` → 220 Ω resistor → red LED → GND
+
+## Serial monitor
+
+At `9600 baud`, the sketch continuously prints:
+
+- the measured voltage for `D8+,D9-`
+- the measured voltage for `D9+,D8-`
+- the final verdict, either `OK` or `PROBLEM`
+
+Example:
+
+```text
+D8+,D9-: 4.940 V (target 4.945) | D9+,D8-: 0.276 V (target 0.280) => OK (green LED)
+```
+
+## Calibration
+
+If you use another cable, diode type, supply voltage, Arduino board, or resistor value, adjust these constants in `main.ino`:
 
 - `TARGET_AB`
 - `TARGET_BA`
 - `TOL_AB`
 - `TOL_BA`
-- `PWM_LED_GREEN` și `PWM_LED_RED` pentru intensitatea LED-urilor (`0` = stins, `255` = intensitate maximă)
+- `PWM_LED_GREEN` and `PWM_LED_RED` for LED brightness (`0` = off, `255` = maximum brightness)
 
-Recomandare: măsoară de câteva ori pe un cablu „bun” și setează țintele după media rezultatelor.
+Recommended calibration workflow:
 
-## Fișiere
+1. Connect a known-good cable.
+2. Watch the serial monitor for several measurement cycles.
+3. Average the stable readings for both polarities.
+4. Update `TARGET_AB` and `TARGET_BA` with those averages.
+5. Adjust `TOL_AB` and `TOL_BA` wide enough to cover normal measurement variation, but narrow enough to reject bad cables.
 
-- `main.ino` – logica de test în ambele polarități + control LED-uri.
-- `README.md` – documentația pentru versiunea curentă.
+## Project files
+
+- `main.ino`: Arduino sketch with the bidirectional diode-test logic, calibration constants, serial output, and LED status control.
+- `README.md`: English documentation for the current version of the tester.
